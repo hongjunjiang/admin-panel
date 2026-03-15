@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="匹配管理">
+<meta name="theme-color" content="#0a0a1a">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%230077b6%22 width=%22100%22 height=%22100%22 rx=%2220%22/><text y=%2268%22 x=%2250%22 text-anchor=%22middle%22 font-size=%2250%22>⚡</text></svg>">
+<title>匹配管理</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0a0a1a;--card:#131328;--border:#1e1e3a;--accent:#00d4ff;--accent2:#0077b6;--text:#e8e8f0;--text2:#8888aa;--success:#2a9d8f;--danger:#e63946;--warning:#f4a261;--safe-top:env(safe-area-inset-top);--safe-bottom:env(safe-area-inset-bottom)}
+body{font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-top:calc(var(--safe-top) + 56px);padding-bottom:calc(var(--safe-bottom) + 70px);overflow-x:hidden}
+.header{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:var(--safe-top) 16px 0;border-bottom:1px solid var(--border)}
+.header-inner{display:flex;align-items:center;justify-content:space-between;height:56px}
+.header h1{font-size:18px;color:var(--accent);font-weight:700}
+.header .status{font-size:11px;color:var(--success);display:flex;align-items:center;gap:4px}
+.header .status::before{content:'';width:6px;height:6px;background:var(--success);border-radius:50%}
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(10,10,26,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:0 0 var(--safe-bottom);display:flex}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 0 6px;color:var(--text2);font-size:10px;gap:2px;cursor:pointer;transition:color .2s}
+.nav-item.active{color:var(--accent)}
+.nav-item .icon{font-size:22px}
+.page{display:none;padding:12px 16px}
+.page.active{display:block}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 10px;text-align:center}
+.stat-val{font-size:24px;font-weight:700;color:var(--accent)}
+.stat-label{font-size:11px;color:var(--text2);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="header"><div class="header-inner"><h1>⚡ 匹配管理</h1><div class="status" id="connStatus">已连接</div></div></div>
+<div id="toast" class="toast"></div>
+
+<div id="page-home" class="page active">
+<div class="stats-grid">
+<div class="stat-card"><div class="stat-val" id="s-total">-</div><div class="stat-label">总授权</div></div>
+<div class="stat-card"><div class="stat-val" id="s-activated">-</div><div class="stat-label">已激活</div></div>
+<div class="stat-card"><div class="stat-val" id="s-expired">-</div><div class="stat-label">已过期</div></div>
+<div class="stat-card"><div class="stat-val" id="s-active">-</div><div class="stat-label">今日活跃</div></div>
+<div class="stat-card"><div class="stat-val" id="s-calls">-</div><div class="stat-label">今日调用</div></div>
+<div class="stat-card"><div class="stat-val" id="s-trial">-</div><div class="stat-label">试用用户</div></div>
+</div>
+<div class="card">
+<div class="card-title">快速创建授权</div>
+<div class="input-row"><input class="input" id="c-code" placeholder="产品信息码（20位数字）" inputmode="numeric" maxlength="20"></div>
+<div class="input-row"><input class="input" id="c-note" placeholder="备注（用户名）"></div>
+<div class="input-row">
+<input class="input" id="c-dur" type="number" value="30" placeholder="时长" style="flex:0.5">
+<select class="select input" id="c-unit" style="flex:0.4"><option value="days">天</option><option value="hours">小时</option></select>
+<input class="input" id="c-limit" type="number" value="100" placeholder="限制" style="flex:0.4">
+</div>
+<div class="radio-group" id="c-type">
+<div class="radio-btn active" data-val="vip" onclick="pickType(this)">全功能VIP</div>
+<div class="radio-btn" data-val="match" onclick="pickType(this)">仅匹配</div>
+</div>
+<button class="btn btn-primary" onclick="createLicense()">创建授权</button>
+<div class="result-box" id="c-result"></div>
+</div>
+</div>
+
+<div id="page-list" class="page">
+<div class="search-box"><input class="input" id="l-search" placeholder="搜索产品码或备注" oninput="filterList()"></div>
+<div class="pull-hint">共 <span id="l-count">0</span> 条授权</div>
+<div id="l-list"></div>
+</div>
+
+<div id="page-data" class="page">
+<div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+<div class="stat-card"><div class="stat-val" id="d-dau">-</div><div class="stat-label">日活</div></div>
+<div class="stat-card"><div class="stat-val" id="d-wau" style="color:var(--success)">-</div><div class="stat-label">周活</div></div>
+<div class="stat-card"><div class="stat-val" id="d-mau" style="color:var(--warning)">-</div><div class="stat-label">月活</div></div>
+</div>
+<div class="card">
+<div class="card-title">今日活跃排名</div>
+<div id="d-rank"></div>
+</div>
+<div class="card">
+<div class="card-title">每日调用趋势</div>
+<div id="d-daily"></div>
+</div>
+</div>
+
+<div class="modal" id="editModal">
+<div class="modal-content">
+<div class="modal-title" id="em-title">编辑</div>
+<div id="em-body"></div>
+<div class="modal-actions">
+<button class="btn btn-outline" onclick="closeModal()">取消</button>
+<button class="btn btn-primary" id="em-confirm" onclick="confirmEdit()">确定</button>
+</div>
+</div>
+</div>
+
+<nav class="nav">
+<div class="nav-item active" onclick="switchPage('home')"><span class="icon">🏠</span>首页</div>
+<div class="nav-item" onclick="switchPage('list')"><span class="icon">📋</span>授权</div>
+<div class="nav-item" onclick="switchPage('data')"><span class="icon">📊</span>数据</div>
+</nav>
+
+<style>
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text)}
+.input{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;transition:border .2s}
+.input:focus{border-color:var(--accent)}
+.input::placeholder{color:var(--text2)}
+.input-row{display:flex;gap:8px;margin-bottom:10px}
+.input-row .input{flex:1}
+.btn{padding:12px 20px;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;width:100%}
+.btn-primary{background:var(--accent2);color:#fff}
+.btn-primary:active{background:#005f8f;transform:scale(0.98)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:active{background:#c0313d}
+.btn-sm{padding:8px 14px;font-size:13px;width:auto;border-radius:8px}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.result-box{margin-top:12px;padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border);display:none}
+.result-box.show{display:block}
+.result-box.success{border-color:var(--success)}
+.result-box.error{border-color:var(--danger)}
+.search-box{position:relative;margin-bottom:12px}
+.search-box .input{padding-left:36px}
+.search-box::before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px}
+.license-item{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px}
+.license-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.license-code{font-family:ui-monospace,monospace;font-size:13px;color:var(--accent);letter-spacing:0.5px}
+.badge{display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-on{background:rgba(42,157,143,0.2);color:var(--success)}
+.badge-off{background:rgba(136,136,170,0.15);color:var(--text2)}
+.badge-warn{background:rgba(244,162,97,0.2);color:var(--warning)}
+.badge-vip{background:rgba(42,157,143,0.2);color:var(--success)}
+.badge-match{background:rgba(244,162,97,0.2);color:var(--warning)}
+.license-info{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:13px;color:var(--text2);margin-bottom:10px}
+.license-info span{color:var(--text)}
+.license-actions{display:flex;gap:8px;flex-wrap:wrap}
+.select{padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:15px;outline:none;-webkit-appearance:none}
+.radio-group{display:flex;gap:8px;margin-bottom:10px}
+.radio-btn{flex:1;padding:10px;text-align:center;background:var(--bg);border:2px solid var(--border);border-radius:10px;font-size:14px;color:var(--text2);cursor:pointer;transition:all .2s}
+.radio-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,0.05)}
+.modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.6);align-items:flex-end;justify-content:center}
+.modal.show{display:flex}
+.modal-content{background:var(--card);border-radius:16px 16px 0 0;padding:20px 16px calc(var(--safe-bottom) + 20px);width:100%;max-width:500px;max-height:70vh;overflow-y:auto}
+.modal-title{font-size:17px;font-weight:600;margin-bottom:16px;text-align:center}
+.modal-actions{display:flex;gap:10px;margin-top:16px}
+.modal-actions .btn{flex:1}
+.empty{text-align:center;color:var(--text2);padding:40px 0;font-size:14px}
+.pull-hint{text-align:center;color:var(--text2);font-size:12px;padding:8px 0}
+.toast{position:fixed;top:calc(var(--safe-top) + 70px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;border-radius:10px;font-size:14px;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+.rank-item{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);gap:10px}
+.rank-item:last-child{border-bottom:none}
+.rank-num{width:28px;text-align:center;font-size:16px;font-weight:700}
+.rank-info{flex:1;min-width:0}
+.rank-code{font-family:monospace;font-size:12px;color:var(--accent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rank-note{font-size:12px;color:var(--text2)}
+.rank-count{font-size:16px;font-weight:700;color:var(--accent)}
+</style>
+<script>
+const API='https://1319543272-jztmvsq313.ap-guangzhou.tencentscf.com';
+let KEY=localStorage.getItem('admin_key')||'';
+if(!KEY){KEY=prompt('请输入管理密钥');if(KEY)localStorage.setItem('admin_key',KEY);else document.body.innerHTML='<div style="text-align:center;padding:100px 20px;color:#888">需要管理密钥才能使用</div>';}
+let allLic=[];
+let editCtx={};
+
+function toast(msg,dur=2000){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+
+async function api(path,data={}){
+  try{
+    const r=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':KEY},body:JSON.stringify(data)});
+    const j=await r.json();
+    if(j.code===403&&j.message&&j.message.includes('密钥')){localStorage.removeItem('admin_key');location.reload();}
+    return j;
+  }catch(e){document.getElementById('connStatus').textContent='连接失败';document.getElementById('connStatus').style.color='var(--danger)';return{code:500,message:e.message};}
+}
+
+function switchPage(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.querySelectorAll('.nav-item')[['home','list','data'].indexOf(name)].classList.add('active');
+  if(name==='list')loadList();
+  if(name==='data')loadData();
+}
+
+function pickType(el){el.parentElement.querySelectorAll('.radio-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
+
+async function loadStats(){
+  const r=await api('/admin/stats');
+  if(r.code===200){
+    const s=r.data.stats;
+    document.getElementById('s-total').textContent=s.total_licenses||0;
+    document.getElementById('s-activated').textContent=s.activated_licenses||0;
+    document.getElementById('s-expired').textContent=s.expired_licenses||0;
+    document.getElementById('s-active').textContent=s.today_active||0;
+    document.getElementById('s-calls').textContent=s.today_calls||0;
+    document.getElementById('s-trial').textContent=s.total_trial_users||0;
+  }
+}
+
+async function createLicense(){
+  let code=document.getElementById('c-code').value.replace(/\D/g,'');
+  const note=document.getElementById('c-note').value.trim();
+  const dur=parseFloat(document.getElementById('c-dur').value)||30;
+  const unit=document.getElementById('c-unit').value;
+  const limit=parseInt(document.getElementById('c-limit').value)||100;
+  const type=document.querySelector('#c-type .active').dataset.val;
+  const box=document.getElementById('c-result');
+  if(!code||code.length!==20){box.className='result-box show error';box.innerHTML='产品码必须20位数字';return;}
+  const body={product_code:code,note,daily_limit:limit};
+  if(unit==='hours')body.hours=dur;else body.days=dur;
+  if(type==='match')body.features='match';
+  box.className='result-box show';box.innerHTML='<span style="color:var(--accent)">处理中...</span>';
+  const r=await api('/admin/create_with_activation',body);
+  if(r.code===200){
+    const d=r.data;
+    box.className='result-box show success';
+    box.innerHTML='<div style="color:var(--success);font-weight:600;margin-bottom:8px">✓ 创建成功</div><div style="margin-bottom:6px">激活码: <span style="color:var(--accent);font-family:monospace;font-size:16px;letter-spacing:1px">'+d.activation_code+'</span></div><div style="font-size:13px;color:var(--text2)">有效期: '+d.days+' | 限制: '+d.daily_limit+'次/天 | 到期: '+d.expire_date+'</div><button class="btn btn-sm btn-primary" style="margin-top:10px;width:auto" onclick="copyText(\''+d.activation_code+'\')">📋 复制激活码</button>';
+    document.getElementById('c-code').value='';document.getElementById('c-note').value='';
+    loadStats();
+  }else{box.className='result-box show error';box.innerHTML=r.message;}
+}
+
+async function loadList(){const r=await api('/admin/list');if(r.code===200){allLic=r.data.licenses||[];renderList(allLic);}}
+
+function filterList(){
+  const q=document.getElementById('l-search').value.toLowerCase();
+  if(!q){renderList(allLic);return;}
+  renderList(allLic.filter(l=>(l.product_code||'').includes(q)||(l.note||'').toLowerCase().includes(q)));
+}
+
+function renderList(list){
+  document.getElementById('l-count').textContent=list.length;
+  if(!list.length){document.getElementById('l-list').innerHTML='<div class="empty">暂无授权</div>';return;}
+  let h='';
+  list.forEach(l=>{
+    const st=l.activated?'<span class="badge badge-on">已激活</span>':'<span class="badge badge-off">未激活</span>';
+    const feat=l.features&&l.features.length?'<span class="badge badge-match">仅匹配</span>':'<span class="badge badge-vip">VIP</span>';
+    const dl=typeof l.days_left==='string'&&l.days_left.endsWith('h')?l.days_left.replace('h','小时'):l.days_left==='永久'?'永久':l.days_left+'天';
+    const pc=l.product_code;
+    h+='<div class="license-item"><div class="license-header"><span class="license-code" onclick="copyText(\''+pc+'\')">'+pc+'</span>'+st+'</div><div class="license-info"><div>剩余: <span>'+dl+'</span></div><div>今日: <span>'+(l.today_used||0)+'/'+(l.daily_limit||100)+'</span></div><div>备注: <span>'+(l.note||'-')+'</span></div><div>类型: '+feat+'</div></div><div class="license-actions"><button class="btn btn-sm btn-outline" onclick="editDays(\''+pc+'\',\''+l.days_left+'\')">改时间</button><button class="btn btn-sm btn-outline" onclick="editNote(\''+pc+'\',\''+(l.note||'').replace(/'/g,"\\'")+'\')">改备注</button><button class="btn btn-sm btn-outline" onclick="editLimit(\''+pc+'\','+(l.daily_limit||100)+')">改限制</button>'+(l.activated?'<button class="btn btn-sm btn-outline" style="color:var(--warning)" onclick="unbindLic(\''+pc+'\')">解绑</button>':'')+'<button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="deleteLic(\''+pc+'\')">删除</button></div></div>';
+  });
+  document.getElementById('l-list').innerHTML=h;
+}
+
+async function unbindLic(pc){if(!confirm('确定解绑 '+pc+'？'))return;const r=await api('/admin/unbind',{product_code:pc});toast(r.code===200?'解绑成功':r.message);loadList();}
+async function deleteLic(pc){if(!confirm('确定删除 '+pc+'？'))return;const r=await api('/admin/delete',{product_code:pc});toast(r.code===200?'已删除':r.message);loadList();loadStats();}
+
+function editDays(pc,cur){
+  editCtx={type:'days',pc};
+  document.getElementById('em-title').textContent='修改时间';
+  document.getElementById('em-body').innerHTML='<div class="input-row"><input class="input" id="ed-val" type="number" value="'+(typeof cur==='string'&&cur.endsWith('h')?parseFloat(cur):cur==='永久'?-1:cur)+'" placeholder="时长"></div><div class="input-row"><select class="select input" id="ed-unit"><option value="days">天</option><option value="hours">小时</option></select></div><div style="font-size:12px;color:var(--text2)">输入0或负数=永久</div>';
+  if(typeof cur==='string'&&cur.endsWith('h'))setTimeout(()=>document.getElementById('ed-unit').value='hours',0);
+  openModal();
+}
+
+function editNote(pc,cur){
+  editCtx={type:'note',pc};
+  document.getElementById('em-title').textContent='修改备注';
+  document.getElementById('em-body').innerHTML='<input class="input" id="ed-val" value="'+cur+'" placeholder="备注">';
+  openModal();
+}
+
+function editLimit(pc,cur){
+  editCtx={type:'limit',pc};
+  document.getElementById('em-title').textContent='修改每日限制';
+  document.getElementById('em-body').innerHTML='<input class="input" id="ed-val" type="number" value="'+cur+'" placeholder="每日限制">';
+  openModal();
+}
+
+async function confirmEdit(){
+  const val=document.getElementById('ed-val').value;
+  let r;
+  if(editCtx.type==='days'){
+    const unit=document.getElementById('ed-unit').value;
+    const body={product_code:editCtx.pc};
+    if(unit==='hours')body.hours=parseFloat(val);else body.days=parseInt(val);
+    r=await api('/admin/update_license',body);
+  }else if(editCtx.type==='note'){
+    r=await api('/admin/update_note',{product_code:editCtx.pc,note:val});
+  }else if(editCtx.type==='limit'){
+    r=await api('/admin/update_license',{product_code:editCtx.pc,daily_limit:parseInt(val)});
+  }
+  closeModal();toast(r.code===200?'更新成功':r.message);loadList();
+}
+
+function openModal(){document.getElementById('editModal').classList.add('show');}
+function closeModal(){document.getElementById('editModal').classList.remove('show');}
+document.getElementById('editModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+
+async function loadData(){
+  const r=await api('/admin/usage_history',{days:30});
+  if(r.code!==200)return;
+  const d=r.data;
+  const as=d.active_stats||{};
+  document.getElementById('d-dau').textContent=as.dau||0;
+  document.getElementById('d-wau').textContent=as.wau||0;
+  document.getElementById('d-mau').textContent=as.mau||0;
+  const rank=d.today_ranking||[];
+  if(!rank.length){document.getElementById('d-rank').innerHTML='<div class="empty">暂无数据</div>';}
+  else{let h='';rank.slice(0,20).forEach((r,i)=>{const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);h+='<div class="rank-item"><div class="rank-num">'+medal+'</div><div class="rank-info"><div class="rank-code">'+r.product_code+'</div><div class="rank-note">'+(r.note||'-')+'</div></div><div class="rank-count">'+r.count+'</div></div>';});document.getElementById('d-rank').innerHTML=h;}
+  const daily=d.daily||[];
+  if(!daily.length){document.getElementById('d-daily').innerHTML='<div class="empty">暂无数据</div>';}
+  else{const max=Math.max(...daily.map(d=>d.calls),1);let h='';daily.slice(0,14).forEach(d=>{const w=Math.round(d.calls/max*100);h+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--text2);width:70px;flex-shrink:0">'+d.date.slice(5)+'</span><div style="flex:1;height:18px;background:var(--bg);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+w+'%;background:var(--accent2);border-radius:4px"></div></div><span style="font-size:13px;font-weight:600;color:var(--accent);width:40px;text-align:right">'+d.calls+'</span></div>';});document.getElementById('d-daily').innerHTML=h;}
+}
+
+function copyText(t){
+  if(navigator.clipboard){navigator.clipboard.writeText(t).then(()=>toast('已复制'));}
+  else{const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);toast('已复制');}
+}
+
+document.getElementById('c-code').addEventListener('input',function(){this.value=this.value.replace(/\D/g,'');});
+loadStats();
+</script>
+</body>
+</html>
