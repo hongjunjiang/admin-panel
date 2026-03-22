@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0f172a">
+<title>代理面板</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b1220;
+  --panel:#111a2e;
+  --panel-2:#17223b;
+  --line:#243251;
+  --text:#e5edf9;
+  --muted:#8ea0c0;
+  --brand:#20b8ff;
+  --ok:#1db67d;
+  --warn:#ffb84d;
+  --bad:#ef5350;
+}
+body{
+  font-family:"Microsoft YaHei",system-ui,sans-serif;
+  background:radial-gradient(circle at top,#15315d 0%,#0b1220 45%,#08101b 100%);
+  color:var(--text);
+  min-height:100vh;
+  padding:16px 16px 88px;
+}
+.wrap{max-width:760px;margin:0 auto}
+.hero{
+  background:linear-gradient(135deg,rgba(32,184,255,.18),rgba(255,255,255,.04));
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:20px;
+  margin-bottom:16px;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+}
+.hero h1{font-size:26px;margin-bottom:8px}
+.hero p{color:var(--muted);line-height:1.6}
+.card{
+  background:rgba(17,26,46,.9);
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:16px;
+  margin-bottom:14px;
+  backdrop-filter:blur(10px);
+}
+.title{font-size:16px;font-weight:700;margin-bottom:12px}
+.muted{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{
+  background:var(--panel-2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+}
+.stat .val{font-size:24px;font-weight:800;color:var(--brand)}
+.stat .label{margin-top:6px;color:var(--muted);font-size:12px}
+label{display:block;margin:10px 0 6px;color:var(--muted);font-size:13px}
+input,textarea,button{
+  width:100%;
+  border:none;
+  border-radius:12px;
+  font:inherit;
+}
+input,textarea{
+  background:#0d1527;
+  color:var(--text);
+  border:1px solid var(--line);
+  padding:12px 14px;
+}
+textarea{min-height:88px;resize:vertical}
+button{
+  background:linear-gradient(135deg,#0ea5e9,#2563eb);
+  color:#fff;
+  padding:12px 14px;
+  font-weight:700;
+  cursor:pointer;
+}
+button.secondary{background:#1b2947}
+button:disabled{opacity:.6;cursor:not-allowed}
+.row{display:flex;gap:10px}
+.row > *{flex:1}
+.hint{font-size:12px;color:var(--muted);margin-top:8px}
+.result{
+  display:none;
+  margin-top:12px;
+  padding:12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#0d1527;
+  line-height:1.7;
+  word-break:break-all;
+}
+.result.show{display:block}
+.result.ok{border-color:rgba(29,182,125,.4)}
+.result.bad{border-color:rgba(239,83,80,.4)}
+.list{display:grid;gap:10px}
+.item{
+  background:var(--panel-2);
+  border:1px solid var(--line);
+  border-radius:14px;
+  padding:14px;
+}
+.item-top{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-bottom:8px;
+}
+.code{
+  font-family:Consolas,monospace;
+  color:#8ed6ff;
+  font-size:13px;
+}
+.badge{
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  white-space:nowrap;
+}
+.ok-badge{background:rgba(29,182,125,.15);color:#7fe0b9}
+.wait-badge{background:rgba(255,184,77,.15);color:#ffd089}
+.toolbar{display:flex;gap:10px;margin-top:12px}
+.empty{color:var(--muted);text-align:center;padding:20px 0}
+.footer{
+  position:fixed;
+  left:0;right:0;bottom:0;
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+  background:rgba(8,16,27,.9);
+  border-top:1px solid rgba(255,255,255,.08);
+  backdrop-filter:blur(14px);
+}
+.footer .wrap{display:flex;gap:10px}
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr 1fr}
+  .row{flex-direction:column}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <h1>代理面板</h1>
+    <p>登录后可查看今日额度、创建授权，并查看自己创建的用户。</p>
+  </section>
+
+  <section class="card">
+    <div class="title">登录</div>
+    <label for="agentKey">代理密钥</label>
+    <input id="agentKey" placeholder="AG-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+    <div class="toolbar">
+      <button id="loginBtn" onclick="login()">登录</button>
+      <button class="secondary" onclick="logout()">退出</button>
+    </div>
+    <div class="hint" id="loginHint">当前未登录</div>
+  </section>
+
+  <section class="card">
+    <div class="title">数据概览</div>
+    <div class="grid">
+      <div class="stat"><div class="val" id="todayCreated">-</div><div class="label">今日已创建</div></div>
+      <div class="stat"><div class="val" id="remainingToday">-</div><div class="label">今日剩余额度</div></div>
+      <div class="stat"><div class="val" id="totalUsers">-</div><div class="label">总用户数</div></div>
+      <div class="stat"><div class="val" id="activatedUsers">-</div><div class="label">已激活</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="title">创建授权</div>
+    <label for="productCode">产品码</label>
+    <input id="productCode" maxlength="20" placeholder="20位数字">
+    <div class="row">
+      <div>
+        <label for="days">授权天数</label>
+        <input id="days" type="number" min="1" value="30">
+      </div>
+      <div>
+        <label for="note">备注</label>
+        <input id="note" placeholder="客户备注">
+      </div>
+    </div>
+    <button id="createBtn" onclick="createLicense()">创建并生成激活码</button>
+    <div class="hint">会自动校验代理最大天数和每日额度。</div>
+    <div class="result" id="createResult"></div>
+  </section>
+
+  <section class="card">
+    <div class="title">我的用户</div>
+    <div class="toolbar">
+      <button class="secondary" onclick="loadUsers()">刷新列表</button>
+    </div>
+    <div class="list" id="userList"></div>
+  </section>
+</div>
+
+<div class="footer">
+  <div class="wrap">
+    <button onclick="refreshAll()">刷新全部</button>
+  </div>
+</div>
+
+<script>
+const SERVER_URL = 'https://1319543272-jztmvsq313.ap-guangzhou.tencentscf.com';
+const STORAGE_KEY = 'agent_panel_key';
+
+function setText(id, value) {
+  document.getElementById(id).textContent = value;
+}
+
+function getAgentKey() {
+  return document.getElementById('agentKey').value.trim();
+}
+
+function saveKey(key) {
+  localStorage.setItem(STORAGE_KEY, key);
+  document.getElementById('agentKey').value = key;
+}
+
+function showCreateResult(ok, html) {
+  const el = document.getElementById('createResult');
+  el.className = 'result show ' + (ok ? 'ok' : 'bad');
+  el.innerHTML = html;
+}
+
+async function api(path, body = {}) {
+  const key = getAgentKey();
+  const resp = await fetch(SERVER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Agent-Key': key,
+    },
+    body: JSON.stringify({ ...body, path }),
+  });
+  const result = await resp.json();
+  if (result.body) {
+    return JSON.parse(result.body);
+  }
+  return result;
+}
+
+async function login() {
+  const key = getAgentKey();
+  if (!key) {
+    document.getElementById('loginHint').textContent = '请先输入代理密钥';
+    return;
+  }
+  const result = await api('/agent/login');
+  if (result.code !== 200) {
+    document.getElementById('loginHint').textContent = result.message || '登录失败';
+    return;
+  }
+  saveKey(key);
+  const agent = result.data.agent || {};
+  document.getElementById('loginHint').textContent = `已登录：${agent.agent_name}（ID=${agent.agent_id}）`;
+  applyStats(result.data.stats || {});
+  await loadUsers();
+}
+
+function logout() {
+  localStorage.removeItem(STORAGE_KEY);
+  document.getElementById('agentKey').value = '';
+  document.getElementById('loginHint').textContent = '当前未登录';
+  ['todayCreated','remainingToday','totalUsers','activatedUsers'].forEach(id => setText(id, '-'));
+  document.getElementById('userList').innerHTML = '<div class="empty">已退出登录</div>';
+  document.getElementById('createResult').className = 'result';
+  document.getElementById('createResult').innerHTML = '';
+}
+
+function applyStats(stats) {
+  setText('todayCreated', stats.today_created ?? 0);
+  setText('remainingToday', stats.remaining_today ?? 0);
+  setText('totalUsers', stats.total_users ?? 0);
+  setText('activatedUsers', stats.activated_users ?? 0);
+}
+
+async function createLicense() {
+  const productCode = document.getElementById('productCode').value.replace(/\D/g, '');
+  const days = parseInt(document.getElementById('days').value || '0', 10);
+  const note = document.getElementById('note').value.trim();
+  if (productCode.length !== 20) {
+    showCreateResult(false, '产品码必须是20位数字');
+    return;
+  }
+  if (!days || days <= 0) {
+    showCreateResult(false, '授权天数必须大于0');
+    return;
+  }
+
+  const result = await api('/agent/create', {
+    product_code: productCode,
+    days,
+    note,
+  });
+  if (result.code !== 200) {
+    showCreateResult(false, result.message || '创建失败');
+    return;
+  }
+
+  const data = result.data || {};
+  showCreateResult(true,
+    `创建成功<br>` +
+    `产品码：<span class="code">${data.product_code}</span><br>` +
+    `激活码：<span class="code">${data.activation_code}</span><br>` +
+    `授权天数：${data.days}<br>` +
+    `到期日期：${data.expire_date}`
+  );
+  document.getElementById('productCode').value = '';
+  document.getElementById('note').value = '';
+  await refreshAll();
+}
+
+async function loadUsers() {
+  const list = document.getElementById('userList');
+  list.innerHTML = '<div class="empty">加载中...</div>';
+  const result = await api('/agent/list');
+  if (result.code !== 200) {
+    list.innerHTML = `<div class="empty">${result.message || '加载失败'}</div>`;
+    return;
+  }
+
+  applyStats(result.data.stats || {});
+  const licenses = result.data.licenses || [];
+  if (!licenses.length) {
+    list.innerHTML = '<div class="empty">还没有创建任何用户</div>';
+    return;
+  }
+
+  list.innerHTML = licenses.map(item => {
+    const badge = item.activated
+      ? '<span class="badge ok-badge">已激活</span>'
+      : '<span class="badge wait-badge">未激活</span>';
+    return `
+      <div class="item">
+        <div class="item-top">
+          <div class="code">${item.product_code}</div>
+          ${badge}
+        </div>
+        <div class="muted">到期：${item.expire_date}</div>
+        <div class="muted">剩余：${item.days_left}</div>
+        <div class="muted">今日用量：${item.today_used}/${item.daily_limit}</div>
+        <div class="muted">备注：${item.note || '-'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function refreshAll() {
+  const result = await api('/agent/stats');
+  if (result.code === 200) {
+    const agent = result.data.agent || {};
+    document.getElementById('loginHint').textContent = `已登录：${agent.agent_name}（ID=${agent.agent_id}）`;
+    applyStats(result.data.stats || {});
+  }
+  await loadUsers();
+}
+
+(function init() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    document.getElementById('agentKey').value = saved;
+    login();
+  } else {
+    document.getElementById('userList').innerHTML = '<div class="empty">登录后可查看自己的用户</div>';
+  }
+})();
+</script>
+</body>
+</html>
