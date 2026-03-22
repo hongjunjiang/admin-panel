@@ -52,7 +52,7 @@
   .card{padding:18px}
   .title{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
   .title small{color:var(--muted);font-weight:400}
-  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
   .stat{
     background:var(--panel-2);
     border:1px solid var(--line);
@@ -185,6 +185,7 @@
           <div class="stat"><div class="val" id="remainingToday">-</div><div class="label">今日剩余额度</div></div>
           <div class="stat"><div class="val" id="totalUsers">-</div><div class="label">总用户数</div></div>
           <div class="stat"><div class="val" id="activatedUsers">-</div><div class="label">已激活用户</div></div>
+          <div class="stat"><div class="val" id="renewedUsers">-</div><div class="label">续费用户</div></div>
         </div>
       </section>
 
@@ -218,7 +219,7 @@
           <button onclick="issue('formal')">转正式</button>
           <button onclick="issue('renew')">用户续费</button>
         </div>
-        <div class="hint" id="actionHint">按钮会按后台配置限制天数，创建试用和续费都使用同一个产品码体系。</div>
+        <div class="hint" id="actionHint">试用固定 1 天；转正式和续费默认 30 天，后台允许的话最多可上浮到 35 天。</div>
         <div class="result" id="actionResult"></div>
       </section>
 
@@ -294,19 +295,23 @@ function applyStats(stats) {
   setText('remainingToday', stats.remaining_today ?? 0);
   setText('totalUsers', stats.total_users ?? 0);
   setText('activatedUsers', stats.activated_users ?? 0);
+  setText('renewedUsers', stats.renewed_users ?? 0);
 }
 
 function applyPermissions(agent) {
-  setText('trialLimit', `试用 ${agent.trial_days ?? 0} 天`);
-  setText('formalLimit', `转正式 ${agent.formal_days ?? 0} 天`);
-  setText('renewLimit', `续费 ${agent.renew_days ?? 0} 天`);
-  const canTrial = (agent.trial_days ?? 0) > 0;
-  const canFormal = (agent.formal_days ?? 0) > 0;
-  const canRenew = (agent.renew_days ?? 0) > 0;
+  const trialMax = Number(agent.trial_days ?? 1) || 0;
+  const formalMax = Number(agent.formal_days ?? 30) || 0;
+  const renewMax = Number(agent.renew_days ?? 30) || 0;
+  setText('trialLimit', trialMax > 0 ? '固定 1 天' : '未开放');
+  setText('formalLimit', formalMax >= 30 ? (formalMax > 30 ? `默认 30 天，上限 ${formalMax} 天` : '默认 30 天') : '未开放');
+  setText('renewLimit', renewMax >= 30 ? (renewMax > 30 ? `默认 30 天，上限 ${renewMax} 天` : '默认 30 天') : '未开放');
+  const canTrial = trialMax > 0;
+  const canFormal = formalMax >= 30;
+  const canRenew = renewMax >= 30;
   $('actionHint').textContent = [
-    canTrial ? `试用上限 ${agent.trial_days} 天` : '未开放试用',
-    canFormal ? `转正式上限 ${agent.formal_days} 天` : '未开放转正式',
-    canRenew ? `续费上限 ${agent.renew_days} 天` : '未开放续费'
+    canTrial ? '试用固定 1 天' : '未开放试用',
+    canFormal ? `转正式默认 30 天${formalMax > 30 ? `，最多 ${formalMax} 天` : ''}` : '未开放转正式',
+    canRenew ? `续费默认 30 天${renewMax > 30 ? `，最多 ${renewMax} 天` : ''}` : '未开放续费'
   ].join('，');
 }
 
@@ -336,7 +341,7 @@ function logout() {
   $('agentKey').value = '';
   currentAgent = null;
   $('loginHint').textContent = '当前未登录';
-  ['todayCreated', 'remainingToday', 'totalUsers', 'activatedUsers', 'trialLimit', 'formalLimit', 'renewLimit'].forEach(id => setText(id, '-'));
+  ['todayCreated', 'remainingToday', 'totalUsers', 'activatedUsers', 'renewedUsers', 'trialLimit', 'formalLimit', 'renewLimit'].forEach(id => setText(id, '-'));
   $('userList').innerHTML = '<div class="item"><div class="muted">已退出登录</div></div>';
   $('actionResult').className = 'result';
   $('actionResult').innerHTML = '';
@@ -353,12 +358,13 @@ async function issue(action) {
   }
 
   const limit = currentAgent ? Number(currentAgent[`${action}_days`] ?? currentAgent.max_days ?? 0) : 0;
+  const defaultDays = action === 'trial' ? 1 : 30;
   if (!limit || limit <= 0) {
     showResult(false, `${action} 权限未开放`);
     return;
   }
   if (!days || days <= 0) {
-    days = limit;
+    days = defaultDays;
   }
   if (limit > 0 && days > limit) {
     showResult(false, `当前${action}操作最多只能做 ${limit} 天`);
