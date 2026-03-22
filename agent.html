@@ -225,6 +225,8 @@
 
       <section class="card">
         <div class="title">我的用户</div>
+        <label for="userSearch" style="margin-top:0;">搜索用户</label>
+        <input id="userSearch" placeholder="搜索产品码、备注或动作..." oninput="filterUsers()">
         <div class="toolbar">
           <button class="secondary" onclick="loadUsers()">刷新列表</button>
         </div>
@@ -244,6 +246,7 @@
 const SERVER_URL = 'https://1319543272-jztmvsq313.ap-guangzhou.tencentscf.com';
 const STORAGE_KEY = 'agent_panel_key';
 let currentAgent = null;
+let currentLicenses = [];
 
 function $(id) {
   return document.getElementById(id);
@@ -271,6 +274,10 @@ function showResult(ok, html) {
 function formatDays(value) {
   if (value === null || value === undefined || value === '') return '-';
   return String(value).includes('h') ? String(value).replace('h', '小时') : value;
+}
+
+function filterUsers() {
+  renderUserList(currentLicenses, $('userSearch').value.trim().toLowerCase());
 }
 
 async function api(path, body = {}) {
@@ -339,7 +346,9 @@ async function login() {
 function logout() {
   localStorage.removeItem(STORAGE_KEY);
   $('agentKey').value = '';
+  $('userSearch').value = '';
   currentAgent = null;
+  currentLicenses = [];
   $('loginHint').textContent = '当前未登录';
   ['todayCreated', 'remainingToday', 'totalUsers', 'activatedUsers', 'renewedUsers', 'trialLimit', 'formalLimit', 'renewLimit'].forEach(id => setText(id, '-'));
   $('userList').innerHTML = '<div class="item"><div class="muted">已退出登录</div></div>';
@@ -410,13 +419,30 @@ async function loadUsers() {
   }
 
   applyStats(result.data.stats || {});
-  const licenses = result.data.licenses || [];
-  if (!licenses.length) {
-    list.innerHTML = '<div class="item"><div class="muted">暂无用户记录</div></div>';
+  currentLicenses = result.data.licenses || [];
+  renderUserList(currentLicenses, $('userSearch').value.trim().toLowerCase());
+}
+
+function renderUserList(licenses, query = '') {
+  const list = $('userList');
+  const filtered = query
+    ? licenses.filter(item => {
+        const text = [
+          item.product_code || '',
+          item.note || '',
+          item.grant_type || item.action || '',
+          item.expire_date || '',
+        ].join(' ').toLowerCase();
+        return text.includes(query);
+      })
+    : licenses;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div class="item"><div class="muted">暂无匹配用户</div></div>';
     return;
   }
 
-  list.innerHTML = licenses.map(item => {
+  list.innerHTML = filtered.map(item => {
     const badge = item.activated
       ? '<span class="badge ok-badge">已激活</span>'
       : '<span class="badge wait-badge">未激活</span>';
