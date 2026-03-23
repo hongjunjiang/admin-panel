@@ -171,7 +171,10 @@
       <section class="card">
         <div class="title">登录 <small id="loginHint">当前未登录</small></div>
         <label for="agentKey">代理密钥</label>
-        <input id="agentKey" placeholder="AG-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+        <div style="position:relative">
+          <input id="agentKey" type="password" placeholder="AG-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" style="padding-right:44px">
+          <button type="button" class="secondary" onclick="toggleKeyVisibility()" id="eyeBtn" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;padding:0;border-radius:8px;font-size:18px;display:flex;align-items:center;justify-content:center" title="显示/隐藏密钥">👁</button>
+        </div>
         <div class="toolbar" style="margin-top:12px;">
           <button id="loginBtn" onclick="login()">登录</button>
           <button class="secondary" onclick="logout()">退出</button>
@@ -252,6 +255,11 @@ function $(id) {
   return document.getElementById(id);
 }
 
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function setText(id, value) {
   $(id).textContent = value;
 }
@@ -265,7 +273,25 @@ function saveKey(key) {
   $('agentKey').value = key;
 }
 
-function showResult(ok, html) {
+function toggleKeyVisibility() {
+  const input = $('agentKey');
+  const btn = $('eyeBtn');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    input.type = 'password';
+    btn.textContent = '👁';
+  }
+}
+
+function showResult(ok, text) {
+  const el = $('actionResult');
+  el.className = 'result show ' + (ok ? 'ok' : 'bad');
+  el.textContent = text;
+}
+
+function showResultHtml(ok, html) {
   const el = $('actionResult');
   el.className = 'result show ' + (ok ? 'ok' : 'bad');
   el.innerHTML = html;
@@ -282,19 +308,23 @@ function filterUsers() {
 
 async function api(path, body = {}) {
   const key = getAgentKey();
-  const resp = await fetch(SERVER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Agent-Key': key,
-    },
-    body: JSON.stringify({ ...body, path }),
-  });
-  const result = await resp.json();
-  if (result.body) {
-    return JSON.parse(result.body);
+  try {
+    const resp = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Agent-Key': key,
+      },
+      body: JSON.stringify({ ...body, path }),
+    });
+    const result = await resp.json();
+    if (result.body) {
+      return JSON.parse(result.body);
+    }
+    return result;
+  } catch (e) {
+    return { code: -1, message: '网络请求失败：' + e.message };
   }
-  return result;
 }
 
 function applyStats(stats) {
@@ -369,14 +399,14 @@ async function issue(action) {
   const limit = currentAgent ? Number(currentAgent[`${action}_days`] ?? currentAgent.max_days ?? 0) : 0;
   const defaultDays = action === 'trial' ? 1 : 30;
   if (!limit || limit <= 0) {
-    showResult(false, `${action} 权限未开放`);
+    showResult(false, action + ' 权限未开放');
     return;
   }
   if (!days || days <= 0) {
     days = defaultDays;
   }
   if (limit > 0 && days > limit) {
-    showResult(false, `当前${action}操作最多只能做 ${limit} 天`);
+    showResult(false, '当前' + action + '操作最多只能做 ' + limit + ' 天');
     return;
   }
 
@@ -393,14 +423,14 @@ async function issue(action) {
   }
 
   const data = result.data || {};
-  showResult(true, `
+  showResultHtml(true, `
     操作成功<br>
-    动作：<span class="code">${data.action || action}</span><br>
-    产品码：<span class="code">${data.product_code}</span><br>
-    激活码：<span class="code">${data.activation_code || '-'}</span><br>
-    天数：${data.days}<br>
-    到期：${data.expire_date || '-'}<br>
-    代理ID：${data.agent_id || '-'}${data.existing ? '<br>说明：已在原记录上更新' : ''}
+    动作：<span class="code">${escapeHtml(data.action || action)}</span><br>
+    产品码：<span class="code">${escapeHtml(data.product_code)}</span><br>
+    激活码：<span class="code">${escapeHtml(data.activation_code || '-')}</span><br>
+    天数：${escapeHtml(data.days)}<br>
+    到期：${escapeHtml(data.expire_date || '-')}<br>
+    代理ID：${escapeHtml(data.agent_id || '-')}${data.existing ? '<br>说明：已在原记录上更新' : ''}
   `);
 
   $('productCode').value = '';
@@ -414,7 +444,7 @@ async function loadUsers() {
 
   const result = await api('/agent/list');
   if (result.code !== 200) {
-    list.innerHTML = `<div class="item"><div class="muted">${result.message || '加载失败'}</div></div>`;
+    list.innerHTML = `<div class="item"><div class="muted">${escapeHtml(result.message || '加载失败')}</div></div>`;
     return;
   }
 
@@ -446,18 +476,18 @@ function renderUserList(licenses, query = '') {
     const badge = item.activated
       ? '<span class="badge ok-badge">已激活</span>'
       : '<span class="badge wait-badge">未激活</span>';
-    const action = item.grant_type || item.action || 'trial';
+    const action = escapeHtml(item.grant_type || item.action || 'trial');
     return `
       <div class="item">
         <div class="item-top">
-          <div class="code">${item.product_code}</div>
+          <div class="code">${escapeHtml(item.product_code)}</div>
           ${badge}
         </div>
         <div class="muted">动作：${action}</div>
-        <div class="muted">到期：${item.expire_date}</div>
-        <div class="muted">剩余：${formatDays(item.days_left)}</div>
-        <div class="muted">今日用量：${item.today_used}/${item.daily_limit}</div>
-        <div class="muted">备注：${item.note || '-'}</div>
+        <div class="muted">到期：${escapeHtml(item.expire_date)}</div>
+        <div class="muted">剩余：${escapeHtml(formatDays(item.days_left))}</div>
+        <div class="muted">今日用量：${escapeHtml(item.today_used)}/${escapeHtml(item.daily_limit)}</div>
+        <div class="muted">备注：${escapeHtml(item.note || '-')}</div>
       </div>
     `;
   }).join('');
