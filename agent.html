@@ -163,7 +163,7 @@
 <div class="wrap">
   <section class="hero">
     <h1>代理面板</h1>
-    <p>登录后可按权限执行三类操作：试用、转正式、续费。页面只负责代理动作，不提供管理员改期能力。</p>
+    <p>登录后可按权限执行三类操作：新建授权、转正式、续费。页面只负责代理动作，不提供管理员改期能力。</p>
   </section>
 
   <div class="layout">
@@ -195,7 +195,8 @@
       <section class="card">
         <div class="title">权限说明</div>
         <div class="permission">
-          <div class="permission-row"><span class="name">试用</span><span class="value" id="trialLimit">-</span></div>
+          <div class="permission-row"><span class="name">三小时试用</span><span class="value" id="trial3hLimit">-</span></div>
+          <div class="permission-row"><span class="name">新建授权</span><span class="value" id="trialLimit">-</span></div>
           <div class="permission-row"><span class="name">转正式</span><span class="value" id="formalLimit">-</span></div>
           <div class="permission-row"><span class="name">续费</span><span class="value" id="renewLimit">-</span></div>
         </div>
@@ -217,12 +218,13 @@
             <input id="note" placeholder="客户备注">
           </div>
         </div>
-        <div class="btn-row">
-          <button onclick="issue('trial')">创建试用</button>
+        <div class="btn-row" style="grid-template-columns:repeat(4,minmax(0,1fr));">
+          <button onclick="issue('trial_3h')" style="background:linear-gradient(135deg,#f59e0b,#d97706);">三小时试用</button>
+          <button onclick="issue('trial')">新建授权</button>
           <button onclick="issue('formal')">转正式</button>
           <button onclick="issue('renew')">用户续费</button>
         </div>
-        <div class="hint" id="actionHint">试用固定 1 天；转正式和续费默认 30 天，后台允许的话最多可上浮到 35 天。</div>
+        <div class="hint" id="actionHint">三小时试用固定 3 小时；新建授权默认 1 天（正式会员）；转正式和续费默认 30 天，后台允许的话最多可上浮到 35 天。</div>
         <div class="result" id="actionResult"></div>
       </section>
 
@@ -336,17 +338,21 @@ function applyStats(stats) {
 }
 
 function applyPermissions(agent) {
+  const trial3hEnabled = agent.trial_3h_enabled !== false; // 默认开放三小时试用
   const trialMax = Number(agent.trial_days ?? 1) || 0;
   const formalMax = Number(agent.formal_days ?? 30) || 0;
   const renewMax = Number(agent.renew_days ?? 30) || 0;
+  setText('trial3hLimit', trial3hEnabled ? '固定 3 小时' : '未开放');
   setText('trialLimit', trialMax > 0 ? '固定 1 天' : '未开放');
   setText('formalLimit', formalMax >= 30 ? (formalMax > 30 ? `默认 30 天，上限 ${formalMax} 天` : '默认 30 天') : '未开放');
   setText('renewLimit', renewMax >= 30 ? (renewMax > 30 ? `默认 30 天，上限 ${renewMax} 天` : '默认 30 天') : '未开放');
+  const canTrial3h = trial3hEnabled;
   const canTrial = trialMax > 0;
   const canFormal = formalMax >= 30;
   const canRenew = renewMax >= 30;
   $('actionHint').textContent = [
-    canTrial ? '试用固定 1 天' : '未开放试用',
+    canTrial3h ? '三小时试用固定 3 小时' : '未开放三小时试用',
+    canTrial ? '新建授权固定 1 天（正式会员）' : '未开放新建授权',
     canFormal ? `转正式默认 30 天${formalMax > 30 ? `，最多 ${formalMax} 天` : ''}` : '未开放转正式',
     canRenew ? `续费默认 30 天${renewMax > 30 ? `，最多 ${renewMax} 天` : ''}` : '未开放续费'
   ].join('，');
@@ -380,7 +386,7 @@ function logout() {
   currentAgent = null;
   currentLicenses = [];
   $('loginHint').textContent = '当前未登录';
-  ['todayCreated', 'remainingToday', 'totalUsers', 'activatedUsers', 'renewedUsers', 'trialLimit', 'formalLimit', 'renewLimit'].forEach(id => setText(id, '-'));
+  ['todayCreated', 'remainingToday', 'totalUsers', 'activatedUsers', 'renewedUsers', 'trial3hLimit', 'trialLimit', 'formalLimit', 'renewLimit'].forEach(id => setText(id, '-'));
   $('userList').innerHTML = '<div class="item"><div class="muted">已退出登录</div></div>';
   $('actionResult').className = 'result';
   $('actionResult').innerHTML = '';
@@ -393,6 +399,42 @@ async function issue(action) {
 
   if (productCode.length !== 20) {
     showResult(false, '产品码必须是 20 位数字');
+    return;
+  }
+
+  // 三小时试用特殊处理：复用 trial 接口，传 days='3h' 表示3小时
+  if (action === 'trial_3h') {
+    const trial3hEnabled = currentAgent ? (currentAgent.trial_3h_enabled !== false) : true;
+    if (!trial3hEnabled) {
+      showResult(false, '三小时试用权限未开放');
+      return;
+    }
+    const result = await api('/agent/create', {
+      product_code: productCode,
+      days: '3h',  // 传 '3h' 表示3小时，后端应该已支持
+      note,
+      action: 'trial',
+    });
+
+    if (result.code !== 200) {
+      showResult(false, result.message || '操作失败');
+      return;
+    }
+
+    const data = result.data || {};
+    showResultHtml(true, `
+      操作成功<br>
+      动作：<span class="code">三小时试用</span><br>
+      产品码：<span class="code">${escapeHtml(data.product_code)}</span><br>
+      激活码：<span class="code">${escapeHtml(data.activation_code || '-')}</span><br>
+      时长：3 小时<br>
+      到期：${escapeHtml(data.expire_date || '-')}<br>
+      代理ID：${escapeHtml(data.agent_id || '-')}${data.existing ? '<br>说明：已在原记录上更新' : ''}
+    `);
+
+    $('productCode').value = '';
+    $('note').value = '';
+    await refreshAll();
     return;
   }
 
@@ -472,11 +514,19 @@ function renderUserList(licenses, query = '') {
     return;
   }
 
+  const actionNames = {
+    'trial_3h': '三小时试用',
+    'trial': '新建授权',
+    'formal': '转正式',
+    'renew': '续费'
+  };
+
   list.innerHTML = filtered.map(item => {
     const badge = item.activated
       ? '<span class="badge ok-badge">已激活</span>'
       : '<span class="badge wait-badge">未激活</span>';
-    const action = escapeHtml(item.grant_type || item.action || 'trial');
+    const rawAction = item.grant_type || item.action || 'formal';
+    const action = escapeHtml(actionNames[rawAction] || rawAction);
     return `
       <div class="item">
         <div class="item-top">
